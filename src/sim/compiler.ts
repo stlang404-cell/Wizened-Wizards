@@ -163,11 +163,14 @@ export type CompileResult = { ok: true; spell: CompiledSpell } | { ok: false; er
 const TRAIT_CAP = 1.5;
 /** Damage-equivalent value bought per point of mana. Mana is the universal budget. */
 export const BASE_MANA_EFFICIENCY = 5;
+export const MAX_MANA = 80;
 const MANA_EFF_FORM: Record<Form, number> = { bolt: 1.1, lance: 1, orb: 1.02, nova: 0.95, storm: 1, ward: 1, mend: 1, hex: 0.9 };
 const STATUS_VALUE: Record<string, number> = { chill: 14, stun: 30, conductive: 10, blighted: 16, vulnerable: 28, slowed: 10, frozen: 0 };
 
 export function compileSpell(recipe: SpellRecipe, lib: ComponentLib, opts: CompileOptions = {}): CompileResult {
   const errors: string[] = [];
+  // canonical modifier order: compilation must not depend on slot order
+  recipe = { ...recipe, modifiers: [...recipe.modifiers].sort((a, b) => `${a.kind}:${a.id}`.localeCompare(`${b.kind}:${b.id}`)) };
   const maxMods = opts.maxModifiers ?? 3;
   const ess = resolveIngredient(recipe.essence, lib);
   if (!ess) errors.push('The essence is missing or unknown.');
@@ -207,7 +210,8 @@ export function compileSpell(recipe: SpellRecipe, lib: ComponentLib, opts: Compi
 
   // ---- aggregate properties & traits ----
   const P = { ...ess.props };
-  for (const m of mods as ResolvedIngredient[]) for (const k of Object.keys(P) as (keyof typeof P)[]) P[k] = P[k] * 0.78 + m.props[k] * 0.22;
+  const modList = mods as ResolvedIngredient[];
+  if (modList.length) for (const k of Object.keys(P) as (keyof typeof P)[]) P[k] = P[k] * (1 - 0.22 * modList.length) + modList.reduce((sum, m) => sum + m.props[k] * 0.22, 0);
   const traits: Record<string, number> = {};
   const addT = (t: Trait, m: number) => (traits[t] = Math.min(TRAIT_CAP, (traits[t] ?? 0) + m));
   for (const t of ess.traits) addT(t.trait, t.mag);
@@ -424,7 +428,7 @@ export function compileSpell(recipe: SpellRecipe, lib: ComponentLib, opts: Compi
 
   let mana = 0;
   {
-    const dmgValue = dmg * hits * (1 + chain * 0.5) + (dot ? dot.dps * dot.duration : 0) + (linger ? linger.dps * linger.duration : 0);
+    const dmgValue = dmg * hits * (1 + chain * 0.5) + (dot ? dot.dps * dot.duration * (dot.type === 'poison' ? 1.5 : 1.15) : 0) + (linger ? linger.dps * linger.duration : 0);
     const value =
       dmgValue * (1 + pierce * 0.3) * (1 + echo * 0.6) * (1 + lifesteal * 0.8) +
       heal * 1.05 +
@@ -437,7 +441,12 @@ export function compileSpell(recipe: SpellRecipe, lib: ComponentLib, opts: Compi
       manaEff *
       (recipe.delivery === 'projectile' ? 1.05 : recipe.delivery === 'beam' ? 0.95 : 1) *
       (1 + 0.3 * clamp(T('efficiency'), 0, 1) + clamp((P.purity - 50) / 250, -0.1, 0.15));
-    mana = clamp(value / eff, 6, 95);
+    mana = Math.max(6, value / eff);
+    if (mana > MAX_MANA) {
+      // beyond the mana ceiling, power is scaled down rather than discounted
+      effMul(MAX_MANA / mana);
+      mana = MAX_MANA;
+    }
   }
   if (dot) dot = { type: dot.type, dps: round1(dot.dps), duration: dot.duration };
   if (linger) linger = { dps: round1(linger.dps), duration: linger.duration };

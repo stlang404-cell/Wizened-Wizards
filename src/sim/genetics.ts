@@ -316,7 +316,8 @@ export function fuse(ings: Ingredient[], ctx: SynthContext): SynthResult {
 
   // dominant element weighted by potency
   const weight: Partial<Record<Element, number>> = {};
-  for (const x of r) weight[x.element] = (weight[x.element] ?? 0) + x.props.potency + 10;
+  // conductive ingredients channel their element more strongly
+  for (const x of r) weight[x.element] = (weight[x.element] ?? 0) + x.props.potency + x.props.conductivity * 0.5 + 10;
   const ranked = (Object.keys(weight) as Element[]).sort((a, b) => weight[b]! - weight[a]! || a.localeCompare(b));
   const element = ranked[0];
   const secondary = ranked[1];
@@ -337,6 +338,7 @@ export function fuse(ings: Ingredient[], ctx: SynthContext): SynthResult {
       for (const [t, m] of emergentFor(r[i].element, r[j].element)) traitMap[t] = Math.max(traitMap[t] ?? 0, m + Math.max(0, compat) * 0.3);
 
   const idSeed = `fuse|${[...ids].sort().join('+')}`;
+  r.sort((a, b) => a.id.localeCompare(b.id));
   const c = finish('fuse', idSeed, r, element, secondary, props, traitMap, generation, strain, ctx);
   return { ok: true, components: [c], cost: synthCost('fuse', generation) };
 }

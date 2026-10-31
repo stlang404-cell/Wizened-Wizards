@@ -9,7 +9,7 @@ import { ELEMENTS } from './types';
 
 export const DT = 0.1;
 export const MAX_TIME = 100;
-export const COLLAPSE_START = 70;
+export const COLLAPSE_START = 62;
 export const ARENA_MIN = 4;
 export const ARENA_MAX = 96;
 
@@ -36,7 +36,7 @@ export interface CombatStats {
   reflectWhileShielded: number;
 }
 
-export const HP_BASE = 1500;
+export const HP_BASE = 1250;
 export const HP_PER_VIT = 50;
 
 export function deriveStats(w: CombatWizard): CombatStats {
@@ -361,10 +361,13 @@ export function simulateDuel(a: CombatWizard, b: CombatWizard, seed: number, opt
     return 1 - Math.min(0.3, off / 80);
   };
 
+  /** Frozen, or within 1s of thawing: shatter combos still land. */
+  const brittle = (f: Fighter) => has(f, 'frozen') || f.freezeImmune > 2;
+
   const condMet = (spell: CompiledSpell, A: Fighter, B: Fighter): boolean => {
     switch (spell.conditional) {
       case 'vsFrozen':
-        return has(B, 'frozen');
+        return brittle(B);
       case 'vsShielded':
         return B.shield > 1;
       case 'vsCasting':
@@ -380,7 +383,7 @@ export function simulateDuel(a: CombatWizard, b: CombatWizard, seed: number, opt
       case 'vsBurning':
         return has(B, 'burn');
       case 'none':
-        return spell.conditionalMult > 1.01 && has(B, 'frozen');
+        return spell.conditionalMult > 1.01 && brittle(B);
     }
   };
 
@@ -408,26 +411,30 @@ export function simulateDuel(a: CombatWizard, b: CombatWizard, seed: number, opt
     base *= rng.range(0.93, 1.07);
     let shatter = false;
     let breakerMult = 1;
+    // situational bonuses ADD together and are capped, so combos are strong but bounded
+    let bonus = 0;
     if (met) {
       if (spell.conditional === 'vsShielded') breakerMult = spell.conditionalMult;
-      else base *= spell.conditionalMult;
-      if (spell.conditional === 'vsFrozen' || (spell.conditional === 'none' && has(B, 'frozen'))) {
+      else bonus += spell.conditionalMult - 1;
+      if (spell.conditional === 'vsFrozen' || spell.conditional === 'none') {
         shatter = true;
         delete B.statuses.frozen;
-        B.freezeImmune = 3;
+        B.freezeImmune = 2; // immune to re-freezing, but no longer brittle
       }
     }
-    if (spell.trigger === 'onKillshot' && hpPct(B) < 0.25) base *= 1.6 / 0.9;
+    if (spell.trigger === 'onKillshot' && hpPct(B) < 0.25) bonus += 0.6 / 0.9;
     const vul = B.statuses.vulnerable;
-    if (vul && vul.remaining > 0) base *= 1 + vul.mag;
+    if (vul && vul.remaining > 0) bonus += vul.mag;
     let chain = spell.chain + (A.s.perks.has('stormRod') && spell.element === 'storm' ? 1 : 0);
     const cond = B.statuses.conductive;
     if (cond && cond.remaining > 0 && (spell.element === 'storm' || chain > 0)) {
-      base *= 1 + cond.mag;
+      bonus += spell.conditional === 'vsConductive' ? 0 : cond.mag;
       chain += 1;
     }
-    if (A.s.skills.has('e4a') && hpPct(B) < 0.3) base *= 1.25;
-    if (A.s.skills.has('e4b') && t < 10) base *= 1.25;
+    chain = Math.min(chain, 3);
+    if (A.s.skills.has('e4a') && hpPct(B) < 0.3) bonus += 0.25;
+    if (A.s.skills.has('e4b') && t < 10) bonus += 0.25;
+    base *= 1 + Math.min(bonus, 1);
     const res = clamp(B.s.resist[spell.element] * (1 - spell.pierce), -0.3, 0.6);
     base *= 1 - res;
 
@@ -482,7 +489,7 @@ export function simulateDuel(a: CombatWizard, b: CombatWizard, seed: number, opt
         applied.push('chill');
         if ((B.statuses.chill?.stacks ?? 0) >= 3) {
           delete B.statuses.chill;
-          addStatus(B, 'frozen', 1.5 * A.s.ctrlDuration, 1);
+          addStatus(B, 'frozen', 2.2 * A.s.ctrlDuration, 1);
           B.rep.timesFrozen++;
           applied.push('frozen');
           if (B.casting) interruptCast(B, A, si, true);
@@ -508,7 +515,7 @@ export function simulateDuel(a: CombatWizard, b: CombatWizard, seed: number, opt
       const cur = B.statuses[spell.dot.type];
       if (spell.dot.type === 'poison') {
         if (cur && cur.remaining > 0) {
-          cur.stacks = Math.min(5, cur.stacks + 1);
+          cur.stacks = Math.min(3, cur.stacks + 1);
           cur.mag = Math.max(cur.mag, dps);
           cur.remaining = spell.dot.duration;
         } else B.statuses.poison = { remaining: spell.dot.duration, mag: dps, stacks: 1 };
@@ -579,7 +586,7 @@ export function simulateDuel(a: CombatWizard, b: CombatWizard, seed: number, opt
       case 'selfHpMid':
         return hpPct(A) < 0.6;
       case 'enemyFrozen':
-        return has(B, 'frozen');
+        return brittle(B);
       case 'enemyChilled':
         return has(B, 'chill');
       case 'enemyLongCast':
@@ -674,6 +681,11 @@ export function simulateDuel(a: CombatWizard, b: CombatWizard, seed: number, opt
       if (conserve && A.mana < A.s.maxMana * 0.5 && spells[i].manaCost > 16 && spells[i].kind === 'attack') continue;
       avail.push(i);
     }
+    // hold shatter spells while a freeze is building (same logic for every wizard)
+    if (has(B, 'chill') && !has(B, 'frozen') && B.freezeImmune <= 0) {
+      const held = avail.filter((i) => spells[i].tags.includes('shatter'));
+      for (const h of held) avail.splice(avail.indexOf(h), 1);
+    }
     // movement overrides from tactics
     A.rangeOverride = null;
     for (const r of A.w.tactics) {
@@ -741,7 +753,7 @@ export function simulateDuel(a: CombatWizard, b: CombatWizard, seed: number, opt
       const burn = f.statuses.burn;
       if (burn && burn.remaining > 0) dot += burn.mag * DT;
       const poison = f.statuses.poison;
-      if (poison && poison.remaining > 0) dot += poison.mag * poison.stacks * DT;
+      if (poison && poison.remaining > 0) dot += poison.mag * (1 + 0.5 * (poison.stacks - 1)) * DT; // diminishing stacks
       for (const fl of f.fields) {
         dot += fl.dps * DT;
         fl.remaining -= DT;

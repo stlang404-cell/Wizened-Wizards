@@ -97,6 +97,7 @@ export function botPlay(s: GameState, maxActions = 120): string[] {
       }
     }
     if (st.readyForGuardian) {
+      for (const a of ['power', 'vitality', 'wisdom', 'focus'] as const) G.trainAttribute(s, a);
       const r = G.fightDuel(s, st.guardianId, 'guardian');
       log.push(`guardian attempt: ${r.ok ? (r.result.winner === 0 ? 'WON' : 'lost') : r.error}`);
       continue;
