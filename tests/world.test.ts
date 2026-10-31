@@ -237,3 +237,22 @@ describe('offline operation', () => {
     }
   });
 });
+
+describe('endless hierarchy', () => {
+  test('ascension tiers get populations, guardians, tournaments and requirements', () => {
+    const s = freshWorld();
+    s.player.tier = 9; // Ascendant 1
+    s.player.rating = 2700;
+    const opps = G.listOpponents(s);
+    expect(opps.length).toBeGreaterThan(3);
+    expect(npcsInTier(s, 9).length).toBeGreaterThanOrEqual(24);
+    const g = G.ensureGuardian(s, 9);
+    expect(g.library.length).toBeGreaterThanOrEqual(5);
+    expect(compileSpec(npcSpec(g), s.lib).spells.length).toBeGreaterThanOrEqual(5);
+    const st = G.promotionStatus(s);
+    expect(st.req.rating).toBeGreaterThan(2000);
+    advanceWorld(s, 6);
+    expect(s.tournaments.some((t) => t.tier === 9)).toBe(true);
+    expect(G.fightDuel(s, opps[0].npc.id, 'duel').ok).toBe(true);
+  });
+});
