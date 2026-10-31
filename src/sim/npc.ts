@@ -190,15 +190,21 @@ function npcAttrs(rng: Rng, tier: number, p: Personality): Attrs {
   return a;
 }
 
+/**
+ * Tier-appropriate gear. Every NPC draws from the best tier available to them (or one below),
+ * so builds differ by choice and element rather than by luck of the draw.
+ */
 export function npcEquipment(rng: Rng, tier: number, el: Element, wealthy: boolean): string[] {
   const out: string[] = [];
   for (const slot of ['wand', 'core', 'robe', 'relic'] as const) {
-    const opts = EQUIPMENT.filter((e) => e.slot === slot && e.tier <= tier && (e.tier >= tier - 2 || e.price === 0));
-    let pick = opts.filter((e) => !e.affinity || e.affinity === el);
-    if (!pick.length) pick = opts;
-    pick.sort((a, b) => b.tier - a.tier || b.price - a.price);
-    const choice = wealthy ? pick[0] : rng.pick(pick);
-    if (choice) out.push(choice.id);
+    const opts = EQUIPMENT.filter((e) => e.slot === slot && e.tier <= tier && (tier === 0 || e.price > 0));
+    if (!opts.length) continue;
+    const best = Math.max(...opts.map((e) => e.tier));
+    let pool = opts.filter((e) => e.tier >= best - (wealthy ? 0 : 1));
+    const themed = pool.filter((e) => !e.affinity || e.affinity === el);
+    if (themed.length) pool = themed;
+    pool.sort((a, b) => b.tier - a.tier || a.id.localeCompare(b.id));
+    out.push(rng.pick(pool).id);
   }
   return out;
 }

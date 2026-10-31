@@ -472,7 +472,8 @@ function applyDuelOutcome(s: GameState, setup: DuelSetup, r: CombatResult, adapt
   const won = r.winner === 0;
   const ctx = setup.context;
   const notes: string[] = [];
-  const k = ctx === 'practice' || ctx === 'guardian' ? 0 : 32;
+  // provisional period: new wizards' ratings move faster (standard Elo practice)
+  const k = ctx === 'practice' || ctx === 'guardian' ? 0 : p.stats.duels < 20 ? 48 : 32;
   const ratingDelta = eloDelta(p.rating, n.rating, won, k);
   const diff = n.rating - p.rating;
   p.rating += ratingDelta;

@@ -464,6 +464,10 @@ export function simulateDuel(a: CombatWizard, b: CombatWizard, seed: number, opt
           broke = true;
         }
       }
+      // overkill dampening: no single strike can delete a wizard
+      const soft = B.s.maxHp * 0.15;
+      const over = Math.max(0, totalThrough + through - Math.max(soft, totalThrough));
+      if (totalThrough + through > soft) through -= over * 0.5;
       totalThrough += dealDamage(B, through, A);
     }
     if (broke && spell.trigger === 'onShieldBreak') {
@@ -524,7 +528,12 @@ export function simulateDuel(a: CombatWizard, b: CombatWizard, seed: number, opt
       }
       applied.push(spell.dot.type);
     }
-    if (spell.linger) B.fields.push({ dps: spell.linger.dps * mult * A.s.powerMult, remaining: spell.linger.duration, element: spell.element, from: A.idx });
+    if (spell.linger) {
+      // at most two hazards per caster on a target; a new one replaces the weakest
+      B.fields.push({ dps: spell.linger.dps * mult * A.s.powerMult, remaining: spell.linger.duration, element: spell.element, from: A.idx });
+      const mine = B.fields.filter((f) => f.from === A.idx).sort((x, y) => x.dps * x.remaining - y.dps * y.remaining);
+      if (mine.length > 2) B.fields.splice(B.fields.indexOf(mine[0]), 1);
+    }
     if (spell.manaBurn > 0) B.mana = Math.max(0, B.mana - spell.manaBurn * mult);
     if (B.casting && (spell.interrupts || (spell.conditional === 'vsCasting' && met))) interruptCast(B, A, si, false);
     events.push({ t, type: 'hit', who: A.idx, spell: si, dmg: Math.round(totalThrough), absorbed: Math.round(totalAbsorbed), broke, statuses: applied, echo, shatter, chain });
@@ -760,7 +769,7 @@ export function simulateDuel(a: CombatWizard, b: CombatWizard, seed: number, opt
       }
       f.fields = f.fields.filter((fl) => fl.remaining > 0);
       if (dot > 0) {
-        const absorbed = Math.min(f.shield, dot * 0.5);
+        const absorbed = Math.min(f.shield, dot * 0.75);
         f.shield -= absorbed;
         const d = dealDamage(f, dot - absorbed, other);
         other.rep.dotDamage += d;
@@ -798,7 +807,7 @@ export function simulateDuel(a: CombatWizard, b: CombatWizard, seed: number, opt
         collapseAnnounced = true;
         events.push({ t, type: 'collapse' });
       }
-      const k = 0.004 + (t - COLLAPSE_START) * 0.0012;
+      const k = 0.004 + (t - COLLAPSE_START) * 0.0012 + Math.max(0, t - 82) * 0.004;
       for (const f of F) {
         f.hp -= f.s.maxHp * k * DT;
       }

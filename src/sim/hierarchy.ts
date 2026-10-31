@@ -74,7 +74,7 @@ export function promotionRequirements(tier: number): PromotionRequirements {
     };
   }
   return {
-    rating: divisionThreshold(tier, 2) + 40,
+    rating: divisionThreshold(tier, 2) + (tier === 0 ? 10 : 40),
     qualifyingWins: 3 + tier,
     tournamentTop2: true,
     componentsInvented: 1 + tier * 2,

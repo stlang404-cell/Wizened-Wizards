@@ -326,7 +326,7 @@ export function compileSpell(recipe: SpellRecipe, lib: ComponentLib, opts: Compi
   let dot: CompiledSpell['dot'];
   let lifesteal = 0;
   let manaBurn = 0;
-  let interrupts = (fb.kind === 'attack' || fb.kind === 'hex') && recipe.delivery === 'instant' && cast <= 0.7;
+  let interrupts = false; // only Disrupt traits, Spellsnap conditionals and specific evolutions interrupt
   let echo = 0;
   let backlash = Math.max(0, (P.volatility - P.stability) / 260);
   const isOff = fb.kind === 'attack' || fb.kind === 'hex';
@@ -431,8 +431,8 @@ export function compileSpell(recipe: SpellRecipe, lib: ComponentLib, opts: Compi
     const dmgValue = dmg * hits * (1 + chain * 0.5) + (dot ? dot.dps * dot.duration * (dot.type === 'poison' ? 1.5 : 1.15) : 0) + (linger ? linger.dps * linger.duration : 0);
     const value =
       dmgValue * (1 + pierce * 0.3) * (1 + echo * 0.6) * (1 + lifesteal * 0.8) +
-      heal * 1.05 +
-      shield * 0.8 * (1 + reflect) +
+      heal * 1.3 +
+      shield * 1.0 * (1 + reflect) +
       statuses.reduce((sum, st) => sum + (STATUS_VALUE[st.type] ?? 10) * st.chance, 0) +
       manaBurn +
       (interrupts ? 10 : 0);
