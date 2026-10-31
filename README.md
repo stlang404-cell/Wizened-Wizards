@@ -107,7 +107,7 @@ npm test
 npx playwright test
 ```
 
-`npm test` runs 53 Vitest tests covering synthesis, ancestry, bounded recursion, compilation and invalid recipes, combat determinism, combos (frost+shatter, storm conductivity, poison, reflection, interrupts, echo), tactics, NPC adaptation, promotion, tournaments, economy and arbitrage, betting settlement, save/load, tampering, migrations, offline source checks, endless-hierarchy population, and **balance round-robins** at tiers 0/2/4/6/8 plus a bot playthrough that must earn the first promotion. `npx playwright test` needs a build first (`npm run build`); it plays the opening loop in Chromium with every non-local request blocked.
+`npm test` runs 52 Vitest tests covering synthesis, ancestry, bounded recursion, compilation and invalid recipes, combat determinism, combos (frost+shatter, storm conductivity, poison, reflection, interrupts, echo), tactics, NPC adaptation, promotion, tournaments, economy and arbitrage, betting settlement, save/load, tampering, migrations, offline source checks, endless-hierarchy population, and **balance round-robins** at tiers 0/2/4/6/8 plus a bot playthrough that must earn the first promotion. `npx playwright test` needs a build first (`npm run build`); it plays the opening loop in Chromium with every non-local request blocked.
 
 ---
 
